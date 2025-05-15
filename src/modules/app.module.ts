@@ -9,6 +9,8 @@ import { RolesModule } from './roles/roles.module'
 import { PermissionsModule } from './permissions/permissions.module'
 import { APP_GUARD } from '@nestjs/core'
 import { JwtAuthGuard } from './auth/guards/jwt.guard'
+import { PermissionsGuard } from './permissions/guards/permissions.guard'
+import { ProductsModule } from './products/products.module'
 
 @Module({
   imports: [
@@ -22,9 +24,19 @@ import { JwtAuthGuard } from './auth/guards/jwt.guard'
     AuthModule,
     RolesModule,
     PermissionsModule,
+    ProductsModule,
   ],
   controllers: [],
-  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
+    },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
