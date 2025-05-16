@@ -21,9 +21,9 @@ import { UserData } from 'interfaces/user.interface'
 
 import { AuthService } from './auth.service'
 import { RegisterUserDto } from './dto/register-user.dto'
-import { LocalAuthGuard } from './guards/local-auth.guard'
 import { JwtAuthGuard } from './guards/jwt.guard'
 import { JwtRefreshAuthGuard } from './guards/jwt-resfresh.guard'
+import { LocalAuthGuard } from './guards/local-auth.guard'
 
 @Controller('auth')
 @UseInterceptors(ClassSerializerInterceptor)

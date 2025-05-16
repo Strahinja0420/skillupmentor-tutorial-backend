@@ -11,12 +11,11 @@ import {
   Post,
   Query,
 } from '@nestjs/common'
-import { User } from 'entities/user.entity'
-import { PaginatedResult } from 'interfaces/paginated-result.interface'
-import { CreateUserDto } from 'modules/users/dto/create-user.dto'
-import { RolesService } from './roles.service'
 import { Role } from 'entities/role.entity'
+import { PaginatedResult } from 'interfaces/paginated-result.interface'
+
 import { CreateUpdateRoleDto } from './dto/create-update-role.dto'
+import { RolesService } from './roles.service'
 
 @Controller('roles')
 export class RolesController {

@@ -30,7 +30,7 @@ export const saveImageToStorage: Options = {
   },
 }
 
-export const isFileExtentionSafe = async (fullFilePath: string): Promise<Boolean> => {
+export const isFileExtentionSafe = async (fullFilePath: string): Promise<boolean> => {
   return (await FileType).fileTypeFromFile(fullFilePath).then((fileExtensionAndMimeType) => {
     if (!fileExtensionAndMimeType?.ext) return false
 

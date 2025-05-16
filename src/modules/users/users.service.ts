@@ -1,16 +1,17 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { User } from 'entities/user.entity'
+import { PostgresErrorCode } from 'helpers/postgresErrorCode.enum'
+import Logging from 'library/Logging'
 import { AbstractService } from 'modules/common/abstract.service'
 import { Repository } from 'typeorm'
-import { CreateUserDto } from './dto/create-user.dto'
-import Logging from 'library/Logging'
-import { UpdateUserDto } from './dto/update-user.dto'
 import { compareHash, hash } from 'utils/bcrypt'
-import { PostgresErrorCode } from 'helpers/postgresErrorCode.enum'
+
+import { CreateUserDto } from './dto/create-user.dto'
+import { UpdateUserDto } from './dto/update-user.dto'
 
 @Injectable()
-export class UsersService extends AbstractService<User> {
+export class UsersService extends AbstractService {
   constructor(@InjectRepository(User) private readonly usersRepository: Repository<User>) {
     super(usersRepository)
   }
@@ -34,8 +35,6 @@ export class UsersService extends AbstractService<User> {
     const { email, password, confirm_password, role_id, ...data } = updateUserDto
     if (user.email !== email && email) {
       user.email = email
-    } else if (email && user.email === email) {
-      throw new BadRequestException('User with that email already exists.')
     }
     if (password && confirm_password) {
       if (password !== confirm_password) {
@@ -66,5 +65,10 @@ export class UsersService extends AbstractService<User> {
   async updateUserImageId(id: string, avatar: string): Promise<User> {
     const user = await this.findById(id)
     return this.update(user.id, { avatar })
+  }
+
+  async findImageNameByUserId(id: string): Promise<string> {
+    const user = await this.findById(id)
+    return user.avatar
   }
 }

@@ -1,13 +1,14 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Product } from 'entities/product.entity'
+import Logging from 'library/Logging'
 import { AbstractService } from 'modules/common/abstract.service'
 import { Repository } from 'typeorm'
+
 import { CreateUpdateProductDto } from './dto/create-update-product.dto'
-import Logging from 'library/Logging'
 
 @Injectable()
-export class ProductsService extends AbstractService<any> {
+export class ProductsService extends AbstractService {
   constructor(@InjectRepository(Product) private readonly productsRepository: Repository<Product>) {
     super(productsRepository)
   }

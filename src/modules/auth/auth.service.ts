@@ -7,17 +7,18 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import { User } from 'entities/user.entity'
+import { Request, Response } from 'express'
+import { PostgresErrorCode } from 'helpers/postgresErrorCode.enum'
+import { CookieType, JwtType, TokenPayload } from 'interfaces/auth.interface'
+import { UserData } from 'interfaces/user.interface'
 import Logging from 'library/Logging'
 import { UsersService } from 'modules/users/users.service'
 import { compareHash, hash } from 'utils/bcrypt'
+
 import { RegisterUserDto } from './dto/register-user.dto'
-import { Request, Response } from 'express'
-import { ConfigService } from '@nestjs/config'
-import { UserData } from 'interfaces/user.interface'
-import { CookieType, JwtType, TokenPayload } from 'interfaces/auth.interface'
-import { PostgresErrorCode } from 'helpers/postgresErrorCode.enum'
 
 @Injectable()
 export class AuthService {
@@ -28,27 +29,22 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, password: string): Promise<User> {
-    Logging.info('Validating user...')
+    Logging.log('Validating user...')
     const user = await this.usersService.findBy({ email: email })
-    if (user === undefined) {
+    if (!user) {
       throw new BadRequestException('Invalid credentials.')
     }
     if (!(await compareHash(password, user.password))) {
       throw new BadRequestException('Invalid credentials.')
     }
 
-    Logging.info('User is valid.')
+    Logging.log('User is valid.')
     return user
   }
 
   async register(registerUserDto: RegisterUserDto): Promise<User> {
-    const hashedPassword = await hash(registerUserDto.password)
+    const hashedPassword: string = await hash(registerUserDto.password)
     const user = await this.usersService.create({
-      role_id: null,
-      ...registerUserDto,
-      password: hashedPassword,
-    })
-    return await this.usersService.create({
       role_id: null,
       ...registerUserDto,
       password: hashedPassword,
@@ -57,17 +53,17 @@ export class AuthService {
   }
 
   async login(userFromRequest: User, res: Response): Promise<void> {
-    const { password, ...user } = await this.usersService.findById(userFromRequest.id, ['role'])
+    const user = await this.usersService.findById(userFromRequest.id, ['role'])
     const accessToken = await this.generateToken(user.id, user.email, JwtType.ACCESS_TOKEN)
     const accessTokenCookie = await this.generateCookie(accessToken, CookieType.ACCESS_TOKEN)
-    const refreshToken = await this.generateToken(user.id, user.email, JwtType.ACCESS_TOKEN)
+    const refreshToken = await this.generateToken(user.id, user.email, JwtType.REFRESH_TOKEN)
     const refreshTokenCookie = await this.generateCookie(refreshToken, CookieType.REFRESH_TOKEN)
     try {
       await this.updateRtHash(user.id, refreshToken)
-      res.setHeader(`Set-Cookie`, [accessTokenCookie, refreshTokenCookie]).json({ ...user })
+      res.setHeader('Set-Cookie', [accessTokenCookie, refreshTokenCookie]).json({ ...user })
     } catch (error) {
       Logging.error(error)
-      throw new InternalServerErrorException('Something went wrong while setting cookies into response header')
+      throw new InternalServerErrorException('Something went wrong while setting cookies into response header.')
     }
   }
 
@@ -78,7 +74,7 @@ export class AuthService {
       res.setHeader('Set-Cookie', this.getCookiesForSignOut()).sendStatus(200)
     } catch (error) {
       Logging.error(error)
-      throw new InternalServerErrorException('Something went wrong while setting cookies into response header')
+      throw new InternalServerErrorException('Something went wrong while setting cookies into response header.')
     }
   }
 
@@ -93,9 +89,8 @@ export class AuthService {
       })
     } catch (error) {
       Logging.error(error)
-      throw new UnauthorizedException('Something went wrong while refreshing tokens')
+      throw new UnauthorizedException('Something went wrong while refreshing tokens.')
     }
-
     const token = await this.generateToken(user.id, user.email, JwtType.ACCESS_TOKEN)
     const cookie = await this.generateCookie(token, CookieType.ACCESS_TOKEN)
 
@@ -103,7 +98,7 @@ export class AuthService {
       req.res.setHeader('Set-Cookie', cookie)
     } catch (error) {
       Logging.error(error)
-      throw new InternalServerErrorException('Something went wrong while setting cookie into response header')
+      throw new InternalServerErrorException('Something went wrong while setting cookies into response header.')
     }
     return user
   }
@@ -113,22 +108,8 @@ export class AuthService {
       await this.usersService.update(userId, { refresh_token: rt })
     } catch (error) {
       Logging.error(error)
-      throw new InternalServerErrorException('Somthing went wrong while updating user refresh token')
+      throw new InternalServerErrorException('Something went wrong while updating refresh token.')
     }
-  }
-
-  async generateJWT(user: User): Promise<string> {
-    return this.jwtService.signAsync({ sub: user.id, name: user.email })
-  }
-
-  async user(cookie: string): Promise<User> {
-    const data = await this.jwtService.verifyAsync(cookie)
-    return this.usersService.findById(data['id'])
-  }
-
-  async getUserId(request: Request): Promise<string> {
-    const user = request.user as User
-    return user.id
   }
 
   async getUserIfRefreshTokenMatches(refreshToken: string, userId: string): Promise<UserData> {
@@ -147,26 +128,25 @@ export class AuthService {
       const payload: TokenPayload = { sub: userId, name: email, type }
       let token: string
       switch (type) {
-        case JwtType.ACCESS_TOKEN:
-          token = await this.jwtService.signAsync(payload)
-          break
-
         case JwtType.REFRESH_TOKEN:
           token = await this.jwtService.signAsync(payload, {
             secret: this.configService.get('JWT_REFRESH_SECRET'),
             expiresIn: `${this.configService.get('JWT_REFRESH_SECRET_EXPIRES')}s`,
           })
           break
+        case JwtType.ACCESS_TOKEN:
+          token = await this.jwtService.signAsync(payload)
+          break
         default:
-          throw new BadRequestException('Access denied')
+          throw new BadRequestException('Permission denied.')
       }
       return token
     } catch (error) {
       Logging.error(error)
       if (error?.code === PostgresErrorCode.UniqueViolation) {
-        throw new BadRequestException('User with that email already exists')
+        throw new BadRequestException('User with that email already exists.')
       }
-      throw new InternalServerErrorException('Something went wrong while generationg a new token')
+      throw new InternalServerErrorException('Something went wrong while generating a new token.')
     }
   }
 
@@ -176,25 +156,30 @@ export class AuthService {
       switch (type) {
         case CookieType.REFRESH_TOKEN:
           cookie = `refresh_token=${token}; HttpOnly; Path=/; Max-Age=${this.configService.get(
-            'JWT_SECRET_EXPIRES',
+            'JWT_REFRESH_TOKEN_EXPIRATION_TIME',
           )}; SameSite=strict`
           break
         case CookieType.ACCESS_TOKEN:
           cookie = `access_token=${token}; HttpOnly; Path=/; Max-Age=${this.configService.get(
-            'JWT_REFRESH_SECRET_EXPIRES',
+            'JWT_EXPIRATION_TIME',
           )}; SameSite=strict`
           break
         default:
-          throw new BadRequestException('Access denied')
+          throw new BadRequestException('Permission denied.')
       }
       return cookie
     } catch (error) {
       Logging.error(error)
-      throw new InternalServerErrorException('Something went wrong while generationg a new cookie')
+      throw new InternalServerErrorException('Something went wrong while generating a new cookie.')
     }
   }
 
   getCookiesForSignOut(): string[] {
     return ['access_token=; HttpOnly; Path=/; Max-Age=0', 'refresh_token=; HttpOnly; Path=/; Max-Age=0']
+  }
+
+  async getUserId(request: Request): Promise<string> {
+    const user = request.user as User
+    return user.id
   }
 }
